@@ -10,8 +10,7 @@ from brainflow.data_filter import (
 )
 import numpy as np
 from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds
-from Board import Board, get_board_id
-from utils.save_to_csv import save_to_csv
+from Board import Board
 
 # initialize the pygame
 pygame.init()
@@ -23,6 +22,9 @@ BOARD_ID = 22  # muse 2 id
 
 # create board object
 board = Board(board_id=BOARD_ID)
+sampling_rate = board.get_sampling_rate()
+BUFFER_LENGTH = 1
+NUM_POINTS = sampling_rate * BUFFER_LENGTH
 
 # create the screen
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -44,9 +46,10 @@ while True:
             exit()
 
     # bci
-    data = board.get_new_data()
+    data = board.get_data_quantity(NUM_POINTS)
     exg_channels = board.get_exg_channels()
     print(data)
+    eeg_data = data[exg_channels,:]
 
     # updates display surface
     pygame.display.update()
