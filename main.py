@@ -1,3 +1,4 @@
+from matplotlib.pyplot import plot
 import pygame  # docs found here: https://www.pygame.org/docs/
 from sys import exit
 
@@ -9,8 +10,11 @@ from brainflow.data_filter import (
     DetrendOperations,
 )
 import numpy as np
+import matplotlib.pyplot as plt
 from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds
-from Board import Board
+from Board import Board, get_board_id
+
+from eeg_functions import *
 
 # initialize the pygame
 pygame.init()
@@ -22,9 +26,10 @@ BOARD_ID = 22  # muse 2 id
 
 # create board object
 board = Board(board_id=BOARD_ID)
-sampling_rate = board.get_sampling_rate()
-BUFFER_LENGTH = 1
-NUM_POINTS = sampling_rate * BUFFER_LENGTH
+sampling_rate = board.get_sampling_rate(BOARD_ID)
+
+buffer_length = 1
+num_points = sampling_rate * buffer_length
 
 # create the screen
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -37,6 +42,10 @@ pygame.display.set_icon(window_icon)
 # create Clock object
 clock = pygame.time.Clock()
 
+# arrays
+channels = []
+alpha_levels = []
+
 # game loop
 while True:
     # event loop
@@ -46,10 +55,48 @@ while True:
             exit()
 
     # bci
-    data = board.get_data_quantity(NUM_POINTS)
-    exg_channels = board.get_exg_channels()
-    print(data)
-    eeg_data = data[exg_channels,:]
+    data = board.get_data_quantity(num_points)
+    cluster = []
+
+    alpha_index = 2
+    for i in range(1, 5):
+        channel = data[i, :]
+        fftData = np.fft.fft(channel)
+        freq = np.fft.fftfreq(len(channel))*250
+
+        # Remove unnecessary negative reflection
+        fftData = fftData[1:int(len(fftData)/2)]
+        freq = freq[1:int(len(freq)/2)]
+
+        # Recall FFT is a complex function
+        fftData = np.sqrt(fftData.real**2 + fftData.imag**2)
+
+        bandTotals = [0,0,0,0,0]
+        bandCounts = [0,0,0,0,0]
+
+        for point in range(len(freq)):
+            if(freq[point] < 4):
+                bandTotals[0] += fftData[point]
+                bandCounts[0] += 1
+            elif(freq[point] < 8):
+                bandTotals[1] += fftData[point]
+                bandCounts[1] += 1
+            elif(freq[point] < 12):
+                bandTotals[2] += fftData[point]
+                bandCounts[2] += 1
+            elif(freq[point] < 30):
+                bandTotals[3] += fftData[point]
+                bandCounts[3] += 1
+            elif(freq[point] < 100):
+                bandTotals[4] += fftData[point]
+                bandCounts[4] += 1
+
+        # Save the average of all points 
+        bands = list(np.array(bandTotals)/np.array(bandCounts))
+
+        print(i, bands)
+        
+
 
     # updates display surface
     pygame.display.update()
