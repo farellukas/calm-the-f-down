@@ -15,21 +15,14 @@ from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds
 from Board import Board, get_board_id
 
 from eeg_functions import *
+from random import randint
 
 # initialize the pygame
 pygame.init()
 
 # game parameters
-WIDTH = 1600
-HEIGHT = 900
-BOARD_ID = 22  # muse 2 id
-
-# create board object
-board = Board(board_id=BOARD_ID)
-sampling_rate = board.get_sampling_rate(BOARD_ID)
-
-buffer_length = 1
-num_points = sampling_rate * buffer_length
+WIDTH = 768
+HEIGHT = 640
 
 # create the screen
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -42,62 +35,53 @@ pygame.display.set_icon(window_icon)
 # create Clock object
 clock = pygame.time.Clock()
 
-# arrays
-channels = []
-alpha_levels = []
+# customers
+customer_surf = pygame.Surface((128, 128))
+customer_rect = customer_surf.get_rect(topleft=(-128,0))
+
+customers_rect_list = []
+
+# timer
+obstacle_timer = pygame.USEREVENT + 1
+pygame.time.set_timer(obstacle_timer, 1000)
+
+# game functions
+def customer_movement(customer_list):
+    if customer_list:
+        for customer_rect in customer_list:
+            customer_rect.x += 5
+
+            screen.blit(customer_surf, customer_rect)
+        return customer_list
+    else:
+        return []
+
+def collisions(customer_list):
+    for i in range(len(customer_list)):
+        if i == 0:
+            if customer_list[i].right >= WIDTH: 
+                customer_list[i].right = WIDTH
+        else:
+            if customer_list[i].right >= customer_list[i-1].left:
+                customer_list[i].right = customer_list[i-1].left
 
 # game loop
 while True:
+    screen.fill('white')  # background
+
     # event loop
     for event in pygame.event.get():
         if event.type == pygame.QUIT:  # listen for QUIT event
             pygame.quit()
             exit()
-
-    # bci
-    data = board.get_data_quantity(num_points)
-    cluster = []
-
-    alpha_index = 2
-    for i in range(1, 5):
-        channel = data[i, :]
-        fftData = np.fft.fft(channel)
-        freq = np.fft.fftfreq(len(channel))*250
-
-        # Remove unnecessary negative reflection
-        fftData = fftData[1:int(len(fftData)/2)]
-        freq = freq[1:int(len(freq)/2)]
-
-        # Recall FFT is a complex function
-        fftData = np.sqrt(fftData.real**2 + fftData.imag**2)
-
-        bandTotals = [0,0,0,0,0]
-        bandCounts = [0,0,0,0,0]
-
-        for point in range(len(freq)):
-            if(freq[point] < 4):
-                bandTotals[0] += fftData[point]
-                bandCounts[0] += 1
-            elif(freq[point] < 8):
-                bandTotals[1] += fftData[point]
-                bandCounts[1] += 1
-            elif(freq[point] < 12):
-                bandTotals[2] += fftData[point]
-                bandCounts[2] += 1
-            elif(freq[point] < 30):
-                bandTotals[3] += fftData[point]
-                bandCounts[3] += 1
-            elif(freq[point] < 100):
-                bandTotals[4] += fftData[point]
-                bandCounts[4] += 1
-
-        # Save the average of all points 
-        bands = list(np.array(bandTotals)/np.array(bandCounts))
-
-        print(i, bands)
+        if event.type == obstacle_timer:
+            customers_rect_list.append(customer_surf.get_rect(topleft=(randint(-256, -128), 0)))
+            pygame.time.set_timer(obstacle_timer, randint(3000, 10000))  # randomize customer timer
+    
+    # customer movement
+    customer_rect_list = customer_movement(customers_rect_list)
+    collisions(customers_rect_list)
         
-
-
     # updates display surface
     pygame.display.update()
     clock.tick(60)  # set fps ceiling to 60
