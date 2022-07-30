@@ -43,8 +43,10 @@ pygame.display.set_icon(window_icon)
 clock = pygame.time.Clock()
 
 # arrays
-channels = []
 alpha_levels = []
+
+def average(list):
+    return sum(list)/len(list)
 
 # game loop
 while True:
@@ -56,7 +58,7 @@ while True:
 
     # bci
     data = board.get_data_quantity(num_points)
-    cluster = []
+    alpha_session = []
 
     alpha_index = 2
     for i in range(1, 5):
@@ -71,6 +73,7 @@ while True:
         # Recall FFT is a complex function
         fftData = np.sqrt(fftData.real**2 + fftData.imag**2)
 
+        # Band binding
         bandTotals = [0,0,0,0,0]
         bandCounts = [0,0,0,0,0]
 
@@ -93,10 +96,10 @@ while True:
 
         # Save the average of all points 
         bands = list(np.array(bandTotals)/np.array(bandCounts))
+        alpha_bands = bands[alpha_index]
 
-        print(i, bands)
-        
-
+        alpha_session.append(alpha_bands)
+    alpha_levels.append(average(alpha_session))
 
     # updates display surface
     pygame.display.update()
