@@ -44,6 +44,7 @@ clock = pygame.time.Clock()
 
 # arrays
 alpha_levels = []
+thetabeta_ratios = []
 
 def average(list):
     return sum(list)/len(list)
@@ -53,15 +54,23 @@ while True:
     # event loop
     for event in pygame.event.get():
         if event.type == pygame.QUIT:  # listen for QUIT event
+            print('min:', min(alpha_levels[10:]))
             pygame.quit()
             exit()
 
     # bci
     data = board.get_data_quantity(num_points)
     alpha_session = []
+    theta_session = []
+    beta_session = []
 
     alpha_index = 2
-    for i in range(1, 5):
+    theta_index = 1
+    beta_index = 3
+
+    exg_channels = board.get_exg_channels()
+
+    for i in exg_channels:
         channel = data[i, :]
         fftData = np.fft.fft(channel)
         freq = np.fft.fftfreq(len(channel))*250
@@ -97,9 +106,16 @@ while True:
         # Save the average of all points 
         bands = list(np.array(bandTotals)/np.array(bandCounts))
         alpha_bands = bands[alpha_index]
+        theta_bands = bands[theta_index]
+        beta_bands = bands[beta_index]
 
         alpha_session.append(alpha_bands)
+        theta_session.append(theta_bands)
+        beta_session.append(beta_bands)
     alpha_levels.append(average(alpha_session))
+    thetabeta_ratios.append(sum(theta_session)/sum(beta_session))
+    print(average(alpha_session))
+    # print(sum(theta_session)/sum(beta_session))
 
     # updates display surface
     pygame.display.update()
