@@ -26,7 +26,7 @@ pygame.display.set_icon(window_icon)
 clock = pygame.time.Clock()
 
 
-# classes
+# === USER DEFINED CLASSES ===
 class Wall:
     def __init__ (self, x, y, width, height, color, surface):
         self.rect = pygame.Rect(x, y, width, height)
@@ -39,8 +39,35 @@ class Wall:
     def collide(self):
         self.rect.collidepoint()
 
+class Ingredient:
+    def __init__(self, type, screen, left, top):
+        self.type = type
+        self.cooked = False
+        self.held = True
+        self.screen = screen
+        self.rect = pygame.Rect(left, top, 64, 64)
+        if self.type == "fries":
+            self.color = 'orange'
+        elif self.type == "fish":
+            self.color = 'cyan'
 
-# game functions
+    def draw(self):
+        pygame.draw.rect(self.screen, self.color, self.rect)
+
+    def get_held(self):
+        return self.held
+    
+    def drop(self):
+        self.held = False
+
+    def cook(self):
+        if self.type == "fries":
+            self.color = 'yellow'
+        elif self.type == "fish":
+            self.color = 'blue'
+
+
+# === USER DEFINED FUNCTIONS ===
 def customer_movement(customer_list):
     if customer_list:
         for customer_rect in customer_list:
