@@ -1,5 +1,5 @@
-from matplotlib.pyplot import plot
 import pygame  # docs found here: https://www.pygame.org/docs/
+from random import randint, choice
 
 # initialize the pygame
 pygame.init()
@@ -28,8 +28,8 @@ clock = pygame.time.Clock()
 
 # classes
 class Wall:
-    def __init__ (self, x,y,width, height, color,surface):
-        self.rect=pygame.Rect(x,y,width, height)
+    def __init__ (self, x, y, width, height, color, surface):
+        self.rect = pygame.Rect(x, y, width, height)
         self.color = pygame.Color(color)
         self.surface = surface
     
@@ -66,13 +66,27 @@ def customer_complete(customer_list, order_list):
 
 
 # walls
-wall1 = Wall(0, 512, 256, 128, 'brown', self.surface)
-wall2 = Wall(0 ,128 , 384, 128, 'brown', self.surface)
-wall3 = Wall(256, 256, 128, 128, 'brown', self.surface)
-wall4 = Wall(512, 128, 256, 128, 'brown', self.surface)
-wall5 = Wall(512, 384, 128, 256, 'brown', self.surface)
-wall6 = Wall(0, 512, 384, 128, 'brown', self.surface)
-wall7 = Wall(30, 50, 128, 128, 'white', self.surface)
+wall1 = Wall(0, 128, 384, 128, 'brown', screen)
+wall2 = Wall(256, 256, 128, 128, 'brown', screen)
+wall3 = Wall(512, 128, 256, 128, 'brown', screen)
+wall4 = Wall(512, 384, 128, 256, 'brown', screen)
+wall5 = Wall(0, 512, 384, 128, 'brown', screen)
+
+
+# ingredients
+potato_surf = pygame.Surface((64, 64))
+potato_surf.fill('orange')
+potato_rect = potato_surf.get_rect(center = (wall4.rect.center[0], wall4.rect.center[1] - 1/4*(wall4.rect.height)))
+
+fish_surf = pygame.Surface((64, 64))
+fish_surf.fill('cyan')
+fish_rect = fish_surf.get_rect(center = (wall4.rect.center[0], wall4.rect.center[1] + 1/4*(wall4.rect.height)))
+
+
+# stove
+stove_surf = pygame.Surface((128, 128))
+stove_surf.fill('gray')
+stove_rect = stove_surf.get_rect(center = wall1.rect.center)
 
 
 # customers
@@ -111,8 +125,16 @@ while True:
     wall3.draw()
     wall4.draw()
     wall5.draw()
-    wall6.draw()
     
+
+    # ingredients generator
+    screen.blit(potato_surf, potato_rect)
+    screen.blit(fish_surf, fish_rect)
+
+
+    # stove generator
+    screen.blit(stove_surf, stove_rect)
+
     
     # customer physics
     customer_rect_list = customer_movement(customers_rect_list)
