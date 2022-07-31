@@ -60,14 +60,15 @@ class Game:
         self.wall4 = wall(512, 128, 256, 128, 'brown', self.surface)
         self.wall5 = wall(512, 384, 128, 256, 'brown', self.surface)
         self.wall6 = wall(0, 512, 384, 128, 'brown', self.surface)
-        self.walls.add([self.wall2, self.wall3, self.wall4, self.wall5, self.wall6])
+        self.wall7 = wall(384,128, 128, 128, 'brown', self.surface)
+        self.walls.add([self.wall2, self.wall3, self.wall4, self.wall5, self.wall6,self.wall7])
         self.all_sprite=pygame.sprite.Group()
-        self.all_sprite.add([self.wall2, self.wall3, self.wall4, self.wall5, self.wall6])
+        self.all_sprite.add([self.wall2, self.wall3, self.wall4, self.wall5, self.wall6,self.wall7])
         #self.wall = wall(30, 50, 128, 128, 'white', self.surface)
         size=self.surface.get_size()
         #player properties
-        player_width =128
-        player_height=128
+        player_width =72
+        player_height=72
         x1 = size[0]/6 - player_width/2
         y = size[1]/2 - player_height/2
         self.player_speed=7
@@ -242,12 +243,12 @@ class Player(pygame.sprite.Sprite):
         #     self.left = size[0] - self.width
         if pressed_keys[K_UP]:
             self.rect.move_ip(0,-self.velocity_y)
-            print("try to move")
+            
         if pressed_keys[K_DOWN]:
             self.rect.move_ip(0,self.velocity_y)
 
         if pygame.sprite.spritecollideany(self,self.parent.walls):
-            print("found vertical hit")
+            
             hits=pygame.sprite.spritecollide(self,self.parent.walls,False)
             for hit in hits:
                 move_up=hit.rect.top-self.rect.bottom
@@ -263,7 +264,7 @@ class Player(pygame.sprite.Sprite):
             self.rect.move_ip(self.velocity_x,0)
 
         if pygame.sprite.spritecollideany(self,self.parent.walls):
-            print("find horizontal hit")
+            
             hits=pygame.sprite.spritecollide(self,self.parent.walls,False)
             for hit in hits:
                 move_r=hit.rect.right-self.rect.left
@@ -289,4 +290,5 @@ class Player(pygame.sprite.Sprite):
         self.rect = pygame.Rect(self.left, self.top, self.width, self.height)
         pygame.draw.rect(self.surface, self.color, self.rect)
 
+#class food(pygame.sprite.Sprite):
 main()
