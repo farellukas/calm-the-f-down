@@ -76,7 +76,7 @@ while True:
     # customer physics
     customer_rect_list = customer_movement(customers_rect_list)
     customer_collisions(customers_rect_list)
-    if completed == customers_order_list[0]:
+    if customers_order_list and completed == customers_order_list[0]:
         customer_complete(customers_rect_list, customers_order_list)
         
     # updates display surface
