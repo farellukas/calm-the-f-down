@@ -1,44 +1,211 @@
 import pygame  # docs found here: https://www.pygame.org/docs/
 from random import randint, choice
 
-# initialize the pygame
-pygame.init()
+from pygame.locals import(
+    K_UP,
+    K_DOWN,
+    K_LEFT,
+    K_RIGHT
+)
 
 
-# game parameters
+# GLOBAL VARIABLES
 WIDTH = 768
-HEIGHT = 640
+HEIGHT= 640
 ORDERS = ['fries', 'fish']
-completed = None
 
 
-# create the screen
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
-
-
-# customize the pygame window
-pygame.display.set_caption('calm the food down')
-window_icon = pygame.image.load('assets/icon.png')
-pygame.display.set_icon(window_icon)
-
-
-# create Clock object
-clock = pygame.time.Clock()
-
-
-# === USER DEFINED CLASSES ===
-class Wall:
-    def __init__ (self, x, y, width, height, color, surface):
-        self.rect = pygame.Rect(x, y, width, height)
-        self.color = pygame.Color(color)
-        self.surface = surface
+def main():
+    # initialize all pygame modules (some need initialization)
+    pygame.init()
     
+    # create a game object
+    game = Game()
+    
+    # start the main game loop by calling the play method on the game object
+    game.run()
+    
+    # quit pygame and clean up the pygame window
+    pygame.quit()
+  
+  
+# USER-DEFINED CLASSES
+class Game:
+    def __init__(self):
+        # create the screen
+        self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
+        self.surface = pygame.display.get_surface()
+        self.bg_color = pygame.Color('white')
+        self.max_frames = 150
+        self.frame_counter = 0
+        self.FPS = 60
+        self.size = self.surface.get_size()
+        
+        # create Clock object
+        self.game_Clock = pygame.time.Clock()
+        self.close_clicked = False
+        self.continue_game = True
+        
+        # customize the pygame window
+        pygame.display.set_caption('calm the food down')
+        window_icon = pygame.image.load('assets/icon.png')
+        pygame.display.set_icon(window_icon)
+
+        # create Wall objects
+        self.wall1 = Wall(0 ,128 , 384, 128, 'brown', self.surface)
+        self.wall2 = Wall(256, 256, 128, 128, 'brown', self.surface)
+        self.wall3 = Wall(512, 128, 256, 128, 'brown', self.surface)
+        self.wall4 = Wall(512, 384, 128, 256, 'brown', self.surface)
+        self.wall5 = Wall(0, 512, 384, 128, 'brown', self.surface)
+        self.wall6 = Wall(384,128, 128, 128, 'brown', self.surface)
+        
+        self.walls = pygame.sprite.Group()
+        self.all_sprites = pygame.sprite.Group()
+        self.walls.add([self.wall1, self.wall2, self.wall3, self.wall4, self.wall5,self.wall6])
+        self.all_sprites.add([self.wall1, self.wall2, self.wall3, self.wall4, self.wall5,self.wall6])
+        
+        # player properties
+        player_width = 72
+        player_height = 72
+        self.player_speed = 25
+        
+        # create Player object
+        self.player = Player(player_height,player_width,self.player_speed,self.surface,self)
+        self.all_sprites.add(self.player)
+        
+        # ingredients
+        self.potato_surf = pygame.Surface((64, 64))
+        self.potato_surf.fill('orange')
+        self.potato_rect = self.potato_surf.get_rect(center = (self.wall4.rect.center[0], self.wall4.rect.center[1] - 1/4*(self.wall4.rect.height)))
+
+        self.fish_surf = pygame.Surface((64, 64))
+        self.fish_surf.fill('cyan')
+        self.fish_rect = self.fish_surf.get_rect(center = (self.wall4.rect.center[0], self.wall4.rect.center[1] + 1/4*(self.wall4.rect.height)))
+
+        # stove
+        self.stove_surf = pygame.Surface((128, 128))
+        self.stove_surf.fill('gray')
+        self.stove_rect = self.stove_surf.get_rect(center = self.wall1.rect.center)
+        
+        # customers
+        self.customer_surf = pygame.Surface((128, 128))
+        self.customer_rect = self.customer_surf.get_rect(topleft=(-128,0))
+        self.customer_list = []
+        self.customer_order_list = []
+        self.customers_rect_list = []
+        self.customers = Customers(self.screen, self.customer_surf, self.customer_list, self.customer_order_list)
+
+        # customer timer
+        self.customer_timer = pygame.USEREVENT + 1
+        pygame.time.set_timer(self.customer_timer, 1000)
+
+    def run(self):    
+        while not self.close_clicked:  # until player clicks close box
+            self.handle_events()
+            self.draw()
+            if self.continue_game:
+                self.update()
+                # self.decide_continue()
+            self.game_Clock.tick(self.FPS)  # set FPS ceiling to self.FPS
+
+    def handle_events(self):
+        # Handle each user event by changing the game state appropriately.
+        events = pygame.event.get()
+        for event in events:
+            if event.type == pygame.QUIT:
+                self.close_clicked = True
+            if event.type == self.customer_timer:
+                self.customers_rect_list.append(self.customer_surf.get_rect(topleft=(randint(-256, -128), 0)))
+                self.customer_order_list.append(choice(ORDERS))
+                pygame.time.set_timer(self.customer_timer, randint(3000, 7000))  # randomize customer timer
+
     def draw(self):
-        pygame.draw.rect(self.surface, self.color, self.rect)
+        # Draw all game objects.
+        self.surface.fill(self.bg_color)  # clear the display surface first
+        for entity in self.all_sprites:
+            self.screen.blit(entity.surf, entity.rect)
+        self.screen.blit(self.potato_surf, self.potato_rect)
+        self.screen.blit(self.fish_surf, self.fish_rect)
+        self.screen.blit(self.stove_surf, self.stove_rect)
+        self.customers_rect_list = self.customers.customer_movement(self.customers_rect_list)
+        
+        pygame.display.flip()  # updates the display
 
-    def collide(self):
-        self.rect.collidepoint()
+    def update(self):
+        # Update the game objects for the next frame.
+        pressed_keys = pygame.key.get_pressed()
+        self.player.move(pressed_keys)
 
+        # customers
+        completed = False
+        self.customers.customer_collisions(self.customers_rect_list)
+        if self.customer_order_list and completed == self.customer_order_list[0]:
+            self.customers.customer_complete(self.customers_rect_list, self.customer_order_list)
+
+
+class Wall(pygame.sprite.Sprite):
+    def __init__ (self, x, y, width, height, color, surface):
+        super(Wall,self).__init__()
+        
+        self.surf = pygame.Surface((width,height))
+        self.surf.fill(color)
+        self.rect = self.surf.get_rect(topleft = (x,y))
+        self.color = pygame.Color(color)
+
+
+class Player(pygame.sprite.Sprite):
+    def __init__(self, height, width, velocity, surface, parent):
+        super(Player,self).__init__()
+        
+        self.surf = pygame.Surface((width,height))
+        self.rect = self.surf.get_rect(topleft=(15,270))
+        self.color = pygame.Color('black')
+        self.surf.fill(self.color)
+        self.velocity = velocity
+        self.parent = parent
+
+    def move(self, pressed_keys):
+        if pressed_keys[K_UP]:
+            self.rect.move_ip(0,-self.velocity)
+            
+        if pressed_keys[K_DOWN]:
+            self.rect.move_ip(0,self.velocity)
+
+        if pygame.sprite.spritecollideany(self,self.parent.walls):
+            hits = pygame.sprite.spritecollide(self,self.parent.walls,False)
+            for hit in hits:
+                move_up = hit.rect.top - self.rect.bottom
+                move_down = hit.rect.bottom-self.rect.top
+                if abs(move_up) < abs(move_down):
+                    self.rect.move_ip(0,move_up)
+                else:
+                    self.rect.move_ip(0,move_down)
+
+        if pressed_keys[K_LEFT]:
+            self.rect.move_ip(-self.velocity, 0)
+        if pressed_keys[K_RIGHT]:
+            self.rect.move_ip(self.velocity, 0)
+
+        if pygame.sprite.spritecollideany(self,self.parent.walls):
+            hits=pygame.sprite.spritecollide(self,self.parent.walls,False)
+            for hit in hits:
+                move_r = hit.rect.right-self.rect.left
+                move_l = hit.rect.left-self.rect.right
+                if abs(move_r) < abs(move_l):
+                    self.rect.move_ip(move_r,0)
+                else:
+                    self.rect.move_ip(move_l,0)
+
+        if self.rect.left <= 0:
+            self.rect.move_ip(-self.rect.left,0)
+        elif self.rect.right >= WIDTH:
+            self.rect.move_ip(-(self.rect.right-WIDTH),0)
+        if self.rect.top <= 0:
+            self.rect.move_ip(0,-self.rect.top)
+        elif self.rect.bottom >= HEIGHT:
+            self.rect.move_ip(0,-(self.rect.bottom-HEIGHT))
+            
+         
 class Ingredient:
     def __init__(self, type, screen, left, top):
         self.type = type
@@ -65,111 +232,35 @@ class Ingredient:
             self.color = 'yellow'
         elif self.type == "fish":
             self.color = 'blue'
-
-
-# === USER DEFINED FUNCTIONS ===
-def customer_movement(customer_list):
-    if customer_list:
-        for customer_rect in customer_list:
-            customer_rect.x += 5
-
-            screen.blit(customer_surf, customer_rect)
-        return customer_list
-    else:
-        return []
-
-def customer_collisions(customer_list):
-    for i in range(len(customer_list)):
-        if i == 0:
-            if customer_list[i].right >= WIDTH: 
-                customer_list[i].right = WIDTH
-        else:
-            if customer_list[i].right >= customer_list[i-1].left:
-                customer_list[i].right = customer_list[i-1].left
-
-def customer_complete(customer_list, order_list):
-    customer_list.pop(0)
-    order_list.pop(0)
-
-
-# walls
-wall1 = Wall(0, 128, 384, 128, 'brown', screen)
-wall2 = Wall(256, 256, 128, 128, 'brown', screen)
-wall3 = Wall(512, 128, 256, 128, 'brown', screen)
-wall4 = Wall(512, 384, 128, 256, 'brown', screen)
-wall5 = Wall(0, 512, 384, 128, 'brown', screen)
-
-
-# ingredients
-potato_surf = pygame.Surface((64, 64))
-potato_surf.fill('orange')
-potato_rect = potato_surf.get_rect(center = (wall4.rect.center[0], wall4.rect.center[1] - 1/4*(wall4.rect.height)))
-
-fish_surf = pygame.Surface((64, 64))
-fish_surf.fill('cyan')
-fish_rect = fish_surf.get_rect(center = (wall4.rect.center[0], wall4.rect.center[1] + 1/4*(wall4.rect.height)))
-
-
-# stove
-stove_surf = pygame.Surface((128, 128))
-stove_surf.fill('gray')
-stove_rect = stove_surf.get_rect(center = wall1.rect.center)
-
-
-# customers
-customer_surf = pygame.Surface((128, 128))
-customer_rect = customer_surf.get_rect(topleft=(-128,0))
-
-customers_rect_list = []
-customers_order_list = []
-
-
-# timer
-obstacle_timer = pygame.USEREVENT + 1
-pygame.time.set_timer(obstacle_timer, 1000)
-
-
-# === GAME LOOP ===
-while True:
-    # set background
-    screen.fill('white') 
-
-
-    # events loop
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:  # listen for QUIT event
-            pygame.quit()
-            exit()
-        if event.type == obstacle_timer:
-            customers_rect_list.append(customer_surf.get_rect(topleft=(randint(-256, -128), 0)))
-            customers_order_list.append(choice(ORDERS))
-            pygame.time.set_timer(obstacle_timer, randint(3000, 7000))  # randomize customer timer
             
             
-    # wall generator
-    wall1.draw()
-    wall2.draw()
-    wall3.draw()
-    wall4.draw()
-    wall5.draw()
+class Customers:
+    def __init__(self, screen, customer_surf, customer_list, order_list):
+        self.screen = screen
+        self.customer_surf = customer_surf
     
+    def customer_movement(self, customer_list):
+      if customer_list:
+          for customer_rect in customer_list:
+              customer_rect.x += 5
 
-    # ingredients generator
-    screen.blit(potato_surf, potato_rect)
-    screen.blit(fish_surf, fish_rect)
+              self.screen.blit(self.customer_surf, customer_rect)
+          return customer_list
+      else:
+          return []
+
+    def customer_collisions(self, customer_list):
+        for i in range(len(customer_list)):
+            if i == 0:
+                if customer_list[i].right >= WIDTH: 
+                    customer_list[i].right = WIDTH
+            else:
+                if customer_list[i].right >= customer_list[i-1].left:
+                    customer_list[i].right = customer_list[i-1].left
+
+    def customer_complete(customer_list, order_list):
+        customer_list.pop(0)
+        order_list.pop(0)
 
 
-    # stove generator
-    screen.blit(stove_surf, stove_rect)
-
-    
-    # customer physics
-    customer_rect_list = customer_movement(customers_rect_list)
-    customer_collisions(customers_rect_list)
-    if customers_order_list and completed == customers_order_list[0]:
-        customer_complete(customers_rect_list, customers_order_list)
-        
-        
-    # updates display surface
-    pygame.display.update()
-    clock.tick(60)  # set fps ceiling to 60
+main()
