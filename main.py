@@ -13,7 +13,7 @@ from pygame.locals import(
 # GLOBAL VARIABLES
 WIDTH = 768
 HEIGHT= 640
-ORDERS = ['fries', 'fish']
+ORDERS = ['fries', 'cooked_fish']
 
 
 def main():
@@ -71,8 +71,9 @@ class Game:
         player_height = 72
         food_height=64
         food_weight =64
-        self.player_speed = 25
+        self.player_speed = 15
         self.holding= None
+        self.score_counter=0
 
         # create Player object
         self.player = Player(player_height,player_width,self.player_speed,self.surface,self)
@@ -94,7 +95,12 @@ class Game:
         self.stove_surf = pygame.Surface((128, 128))
         self.stove_surf.fill('gray')
         self.stove_rect = self.stove_surf.get_rect(center = self.wall1.rect.center)
-        
+
+        # checkout
+        self.checkout_surf = pygame.Surface((128, 128))
+        self.checkout_surf.fill('green')
+        self.checkout_rect = self.stove_surf.get_rect(topright=self.wall3.rect.topright)
+
         # customers
         self.customer_surf = pygame.Surface((128, 128))
         self.customer_rect = self.customer_surf.get_rect(topleft=(-128,0))
@@ -143,18 +149,34 @@ class Game:
                 if pressed_keys[K_SPACE]:
                     self.food.surf.fill("cyan")
                     self.holding="fish"
+                    
             elif pygame.Rect.collidepoint(self.stove_rect,x):
                 if pressed_keys[K_SPACE]:
-                    
                     if self.holding=="fish" or self.holding=="potato":
-                        self.food.surf.fill("grey")
+                        if self.holding == "fish":
+                            self.food.surf.fill("blue")
+                            self.holding="cooked_fish"
+                        elif self.holding == "potato":
+                            self.food.surf.fill("yellow")
+                            self.holding="fries"
+                        
             elif pygame.Rect.collidepoint(self.potato_rect,x):
                 if pressed_keys[K_SPACE]:
                     self.food.surf.fill("orange")
                     self.holding="potato"
             
-        
+            if pygame.Rect.collidepoint(self.checkout_rect,x):
+                if pressed_keys[K_SPACE]:
+                    if self.holding=="cooked_fish" or self.holding=="fries":
+                        if self.holding == self.customer_order_list[0]:
+                            self.customers.customer_complete(self.customers_rect_list,self.customer_order_list)
+                            self.food.surf.fill("black")
+                            self.score_counter+=1
+                            self.holding=None
 
+            
+        
+    
     def draw(self):
         # Draw all game objects.
         self.surface.fill(self.bg_color)  # clear the display surface first
@@ -163,10 +185,22 @@ class Game:
         self.screen.blit(self.potato_surf, self.potato_rect)
         self.screen.blit(self.fish_surf, self.fish_rect)
         self.screen.blit(self.stove_surf, self.stove_rect)
+        self.screen.blit(self.checkout_surf, self.checkout_rect)
         self.customers_rect_list = self.customers.customer_movement(self.customers_rect_list)
+        self.draw_scores()
         pressed_keys=pygame.key.get_pressed()
         self.food.draw(pressed_keys)
         pygame.display.flip()  # updates the display
+
+    def draw_scores(self):
+        score_string1 = str(self.score_counter)
+        font_size = 50
+        fg_color = pygame.Color('black')
+        font = pygame.font.SysFont('', font_size)
+        text_box1 = font.render(score_string1, True, fg_color)
+        text_rect= text_box1.get_rect(bottomleft=(0,HEIGHT))
+        self.surface.blit(text_box1, text_rect)
+
 
     def update(self):
         # Update the game objects for the next frame.
@@ -296,7 +330,7 @@ class Customers:
                 if customer_list[i].right >= customer_list[i-1].left:
                     customer_list[i].right = customer_list[i-1].left
 
-    def customer_complete(customer_list, order_list):
+    def customer_complete(self,customer_list, order_list):
         customer_list.pop(0)
         order_list.pop(0)
 
