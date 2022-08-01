@@ -44,7 +44,7 @@ class Game:
         self.FPS = 60
         self.close_clicked = False
         self.continue_game = True
-        self.started = False
+        self.started = True
         
         # create Clock object
         self.game_Clock = pygame.time.Clock()
@@ -115,11 +115,6 @@ class Game:
 
     def run(self):    
         while not self.close_clicked:  # until player clicks close box
-            self.handle_events()
-            self.draw()
-            if self.continue_game:
-                self.update()
-                # self.decide_continue()
             if not self.started:
                 self.display_main_menu()
             else:
@@ -141,7 +136,7 @@ class Game:
                 pygame.time.set_timer(self.customer_timer, randint(3000, 7000))  # randomize customer timer
 
     def check_holding(self,pressed_keys):
-        #determine if pressed keys
+        # determine if pressed keys
         points=[]
         point1= (self.player.rect.center[0],self.player.rect.center[1]+100)
         points.append(point1)
@@ -200,13 +195,13 @@ class Game:
         pygame.display.flip()  # updates the display
 
     def draw_scores(self):
-        score_string1 = str(self.score_counter)
+        score_string = str(self.score_counter)
         font_size = 50
         fg_color = pygame.Color('black')
         font = pygame.font.SysFont('', font_size)
-        text_box1 = font.render(score_string1, True, fg_color)
-        text_rect= text_box1.get_rect(bottomleft=(0,HEIGHT))
-        self.surface.blit(text_box1, text_rect)
+        text_box = font.render(score_string, True, fg_color)
+        text_rect= text_box.get_rect(bottomleft=(0,HEIGHT))
+        self.surface.blit(text_box, text_rect)
 
     def update(self):
         # Update the game objects for the next frame.
@@ -356,4 +351,5 @@ class Food(pygame.sprite.Sprite):
         self.rect.center=self.player.rect.center
         #self.direction(pressed_keys)
         self.surface.blit(self.surf,self.rect)
+
 main()
