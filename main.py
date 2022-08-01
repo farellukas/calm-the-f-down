@@ -1,5 +1,7 @@
+from re import S
 import pygame  # docs found here: https://www.pygame.org/docs/
 from random import randint, choice
+import time
 
 from pygame.locals import(
     K_UP,
@@ -71,6 +73,7 @@ class Game:
         self.close_clicked = False
         self.continue_game = True
         self.started = False
+        self.round_started = False
         
         # create Clock object
         self.game_Clock = pygame.time.Clock()
@@ -135,28 +138,98 @@ class Game:
         self.customer_order_list = []
         self.customers = Customers(self.screen, self.customer_surf)
 
+        # calibration timer
+        self.calibrating = False
+        self.calibration_timer = 0
+
         # customer timer
         self.customer_timer = pygame.USEREVENT + 1
         pygame.time.set_timer(self.customer_timer, 1000)
 
+        # BCI
+        self.calibrated_data = []
+        self.baseline = None
+        self.stress_threshold_index = 0.9
+        self.stress_threshold = None
 
     def run(self):    
         while not self.close_clicked:  # until player clicks close box
+            self.data = self.record_muse_data()
             self.handle_events()
             if not self.started:
                 self.display_main_menu()
-            else:
-                self.draw()
+            elif self.calibrating:
+                self.baseline = self.calibrate()
+            if self.round_started:
+                self.stress_threshold = self.baseline * self.stress_threshold_index
+
                 if self.continue_game:
+                    self.draw()
                     self.update()
-                    # self.decide_continue()
+                else:
+                    self.display_game_over()
             self.game_Clock.tick(self.FPS)  # set FPS ceiling to self.FPS
 
-    def display_muse_data(self, data):
+    def display_game_over(self):
+        self.screen.fill('beige')
+
+        gameover_font = pygame.font.Font('assets/title_font.ttf', 64)
+        gameover_text_surf = gameover_font.render('you lose! you were too stressed', True, 'black')
+        gameover_text_rect = gameover_text_surf.get_rect(center=(WIDTH/2, HEIGHT/4))
+        self.surface.blit(gameover_text_surf, gameover_text_rect)
+
+        button_text_font = pygame.font.Font('assets/title_font.ttf', 64)
+        button_text_surf = button_text_font.render('play again', True, 'black')
+        button_text_rect = button_text_surf.get_rect(center = (WIDTH/2, HEIGHT/2))
+        self.surface.blit(button_text_surf, button_text_rect)
+        button_border_rect = pygame.Rect(0, 0, button_text_rect.width + 32, button_text_rect.height + 32)
+        button_border_rect.center = button_text_rect.center
+        pygame.draw.rect(self.surface, 'black', button_border_rect, 8)
+
+        mouse_press = pygame.mouse.get_pressed()
+        mouse_pos = pygame.mouse.get_pos()
+
+        if mouse_press[0] and pygame.Rect.collidepoint(button_border_rect, mouse_pos):
+            self.__init__()
+            time.sleep(1)
+
+        pygame.display.update()
+
+    def calibrate(self):
+        self.surface.fill('beige')
+
+        calibrate_text = 'calibrating'
+        if self.calibration_timer >= 4:
+            self.calibrating = False
+            self.round_started = True
+
+            return average(self.calibrated_data)
+        elif self.calibration_timer >= 3:
+            calibrate_text += '...'
+        elif self.calibration_timer >= 2:
+            calibrate_text += '..'
+        elif self.calibration_timer >= 1:
+            calibrate_text += '.'
+        self.calibration_timer += 1/self.FPS
+
+        calibrate_font = pygame.font.Font('assets/title_font.ttf', 64)
+        calibrate_text_surf = calibrate_font.render(calibrate_text, True, 'black')
+        calibrate_text_rect = calibrate_text_surf.get_rect(center=(WIDTH/2, HEIGHT/2))
+        self.surface.blit(calibrate_text_surf, calibrate_text_rect)
+
+        self.calibrated_data.append(self.data)
+
+        pygame.display.flip()
+
+    def display_muse_data(self, data, x=None, y=None):
         data_text_font = pygame.font.Font('assets/game_font.ttf', 32)
-        data_text_surf = data_text_font.render(str(round(data, 2)), True, 'black')
-        data_text_rect = data_text_surf.get_rect(bottomleft=(0, self.scores_rect.top))
+        data_text_surf = data_text_font.render('theta/beta ratio: ' + str(round(data, 2)), True, 'black')
+        if not (x and y):
+            x, y = 0 + data_text_surf.get_width()/2, self.scores_rect.top - data_text_surf.get_height()/2
+        data_text_rect = data_text_surf.get_rect(center=(x, y))
         self.surface.blit(data_text_surf, data_text_rect)
+
+        return data_text_rect
 
     def record_muse_data(self):
         # BCI
@@ -224,7 +297,7 @@ class Game:
         for event in events:
             if event.type == pygame.QUIT:
                 self.close_clicked = True
-            if event.type == self.customer_timer:
+            if self.round_started and event.type == self.customer_timer:
                 self.customer_rect_list.append(self.customer_surf.get_rect(topleft=(randint(-256, -128), 0)))
                 self.customer_order_list.append(choice(ORDERS))
                 pygame.time.set_timer(self.customer_timer, randint(3000, 7000))  # randomize customer timer
@@ -286,15 +359,19 @@ class Game:
         self.scores_rect = self.draw_scores()
         self.food.draw()
 
-        data = self.record_muse_data()
-        self.display_muse_data(data)
-
-        print(data)
+        self.muse_data_rect = self.display_muse_data(self.data)
+        self.display_stress_threshold()
 
         pygame.display.flip()  # updates the display
 
+    def display_stress_threshold(self):
+        text_font = pygame.font.Font('assets/game_font.ttf', 32)
+        text_surf = text_font.render('stay above ' + str(round(self.stress_threshold, 2)), True, 'black')
+        text_rect = text_surf.get_rect(bottomleft = self.muse_data_rect.topleft)
+        self.screen.blit(text_surf, text_rect)
+
     def draw_scores(self):
-        score_string = str(self.score_counter)
+        score_string = 'score: ' + str(self.score_counter)
         fg_color = pygame.Color('black')
         font = pygame.font.Font('assets/game_font.ttf', 32)
         text_box = font.render(score_string, True, fg_color)
@@ -310,11 +387,12 @@ class Game:
         self.player.move(pressed_keys)
 
         # customers
-        completed = False
         self.customers.customer_movement(self.customer_rect_list)
         self.customers.handle_customer_collisions(self.customer_rect_list)
-        if self.customer_order_list and completed == self.customer_order_list[0]:
-            self.customers.customer_complete(self.customer_rect_list, self.customer_order_list)
+
+        # win condition
+        if self.data < self.stress_threshold:
+            self.continue_game = False
 
     def display_main_menu(self):
         self.surface.fill('beige')
@@ -332,6 +410,8 @@ class Game:
         button_border_rect.center = button_text_rect.center
         pygame.draw.rect(self.surface, 'black', button_border_rect, 8)
 
+        self.display_muse_data(self.data, WIDTH/2, 3*HEIGHT/4)
+
         censor_rect = pygame.Rect(0, 0, 104, 12)
         censor_rect.center = (title_rect.center[0]+47, title_rect.center[1]+10)
         pygame.draw.rect(self.surface, 'black', censor_rect)
@@ -341,6 +421,7 @@ class Game:
 
         if mouse_press[0] and pygame.Rect.collidepoint(button_border_rect, mouse_pos):
             self.started = True
+            self.calibrating = True
 
         pygame.display.flip()
         
