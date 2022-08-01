@@ -1,6 +1,8 @@
+from re import S
 import pygame  # docs found here: https://www.pygame.org/docs/
 import time
 from random import randint, choice
+import time
 
 from pygame.locals import(
     K_UP,
@@ -10,13 +12,38 @@ from pygame.locals import(
     K_SPACE
 )
 
+from brainflow.data_filter import (
+    DataFilter,
+    FilterTypes,
+    AggOperations,
+    WindowFunctions,
+    DetrendOperations,
+)
+import numpy as np
+import matplotlib.pyplot as plt
+from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds
+from Board import Board
+
 
 # GLOBAL VARIABLES
 WIDTH = 768
 HEIGHT= 640
-ORDERS = ['fries', 'cooked_fish']
+ORDERS = ['fries', 'fish']
+PLAYER_SPEED = 16
+CUSTOMER_SPEED = 5
+
+# BOARD_ID = 22  # muse 2 id
+# BOARD = Board(board_id=BOARD_ID)
+# SAMPLING_RATE = BOARD.get_sampling_rate(BOARD_ID)
+
+# BUFFER_LENGTH = 1
+# num_points = SAMPLING_RATE * BUFFER_LENGTH
+
+# ALPHA_LEVELS = []
+# THETABETA_RATIOS = []
 
 
+# USER DEFINED FUNCTIONS
 def main():
     # initialize all pygame modules (some need initialization)
     pygame.init()
@@ -29,6 +56,9 @@ def main():
     
     # quit pygame and clean up the pygame window
     pygame.quit()
+
+def average(list):
+    return sum(list)/len(list)
   
   
 # USER-DEFINED CLASSES
@@ -41,13 +71,13 @@ class Game:
         self.max_frames = 150
         self.frame_counter = 0
         self.FPS = 60
-        self.timestarts=5
-        self.size = self.surface.get_size()
+        self.close_clicked = False
+        self.continue_game = True
+        self.started = False
+        self.round_started = False
         
         # create Clock object
         self.game_Clock = pygame.time.Clock()
-        self.close_clicked = False
-        self.continue_game = True
         
         # customize the pygame window
         pygame.display.set_caption('calm the food down')
@@ -66,7 +96,6 @@ class Game:
         self.all_sprites = pygame.sprite.Group()
         self.walls.add([self.wall1, self.wall2, self.wall3, self.wall4, self.wall5,self.wall6])
         self.all_sprites.add([self.wall1, self.wall2, self.wall3, self.wall4, self.wall5,self.wall6])
-        size=self.surface.get_size()
 
         # player properties
         player_width = 72
@@ -78,15 +107,14 @@ class Game:
         self.score_counter=0
 
         # create Player object
-        self.player = Player(player_height,player_width,self.player_speed,self.surface,self)
+        self.player = Player(player_height,player_width,self)
         self.all_sprites.add(self.player)
 
         # create Food object
-        self.food=Food(food_height,food_weight,self.surface,self.player)
+        self.food = Food(food_height,food_weight,self.surface,self.player)
         
         # ingredients
-        self.potato_surf = pygame.Surface((64, 64))
-        self.potato_surf.fill('orange')
+        self.potato_surf = pygame.image.load("assets/models/potato.png ")
         self.potato_rect = self.potato_surf.get_rect(center = (self.wall4.rect.center[0], self.wall4.rect.center[1] - 1/4*(self.wall4.rect.height)))
 
         self.fish_surf = pygame.Surface((64, 64))
@@ -94,35 +122,189 @@ class Game:
         self.fish_rect = self.fish_surf.get_rect(center = (self.wall4.rect.center[0], self.wall4.rect.center[1] + 1/4*(self.wall4.rect.height)))
 
         # stove
-        self.stove_surf = pygame.Surface((128, 128))
-        self.stove_surf.fill('gray')
+        self.stove_surf = pygame.image.load("assets/models/stove.png ")
         self.stove_rect = self.stove_surf.get_rect(center = self.wall1.rect.center)
 
         # checkout
-        self.checkout_surf = pygame.Surface((128, 128))
-        self.checkout_surf.fill('green')
+        self.checkout_surf = pygame.image.load("assets/models/checkout.png")
+        #self.checkout_surf.fill('green')
         self.checkout_rect = self.stove_surf.get_rect(topright=self.wall3.rect.topright)
-
+        
         # customers
         self.customer_surf = pygame.Surface((128, 128))
-        self.customer_rect = self.customer_surf.get_rect(topleft=(-128,0))
-        self.customer_list = []
+        self.customer_rect = self.customer_surf.get_rect(topright=(0,0))
+        self.customer_rect_list = []
         self.customer_order_list = []
-        self.customers_rect_list = []
-        self.customers = Customers(self.screen, self.customer_surf, self.customer_list, self.customer_order_list)
+        self.customers = Customers(self.screen, self.customer_surf)
+
+        # calibration timer
+        self.calibrating = False
+        self.calibration_timer = 0
 
         # customer timer
         self.customer_timer = pygame.USEREVENT + 1
         pygame.time.set_timer(self.customer_timer, 1000)
 
+        # BCI
+        self.calibrated_data = []
+        self.baseline = None
+        self.stress_threshold_index = 0.25
+        self.stress_threshold = None
+
     def run(self):    
         while not self.close_clicked:  # until player clicks close box
+            # self.data = self.record_muse_data()
             self.handle_events()
-            self.draw()
-            if self.continue_game:
-                self.update()
-                # self.decide_continue()
+            if not self.started:
+                self.display_main_menu()
+            elif self.calibrating:
+                self.baseline = self.calibrate()
+            if self.round_started:
+                # self.stress_threshold = self.baseline * self.stress_threshold_index
+
+                if self.continue_game:
+                    self.draw()
+                    self.update()
+                else:
+                    self.display_game_over()
             self.game_Clock.tick(self.FPS)  # set FPS ceiling to self.FPS
+
+    def display_game_over(self):
+        self.screen.fill('beige')
+
+        gameover_font = pygame.font.Font('assets/title_font.ttf', 64)
+        gameover_text_surf = gameover_font.render('you lose! you were too stressed', True, 'black')
+        gameover_text_rect = gameover_text_surf.get_rect(center=(WIDTH/2, HEIGHT/4))
+        self.surface.blit(gameover_text_surf, gameover_text_rect)
+
+        button_text_font = pygame.font.Font('assets/title_font.ttf', 64)
+        button_text_surf = button_text_font.render('play again', True, 'black')
+        button_text_rect = button_text_surf.get_rect(center = (WIDTH/2, HEIGHT/2))
+        self.surface.blit(button_text_surf, button_text_rect)
+        button_border_rect = pygame.Rect(0, 0, button_text_rect.width + 32, button_text_rect.height + 32)
+        button_border_rect.center = button_text_rect.center
+        pygame.draw.rect(self.surface, 'black', button_border_rect, 8)
+
+        mouse_press = pygame.mouse.get_pressed()
+        mouse_pos = pygame.mouse.get_pos()
+
+        if mouse_press[0] and pygame.Rect.collidepoint(button_border_rect, mouse_pos):
+            self.__init__()
+            time.sleep(1)
+
+        pygame.display.update()
+
+    def calibrate(self):
+        self.surface.fill('beige')
+
+        calibrate_text = 'calibrating'
+        if self.calibration_timer >= 4:
+            self.calibrating = False
+            self.round_started = True
+
+            # return average(self.calibrated_data)
+        elif self.calibration_timer >= 3:
+            calibrate_text += '...'
+        elif self.calibration_timer >= 2:
+            calibrate_text += '..'
+        elif self.calibration_timer >= 1:
+            calibrate_text += '.'
+        self.calibration_timer += 1/self.FPS
+
+        calibrate_font = pygame.font.Font('assets/title_font.ttf', 64)
+        calibrate_text_surf = calibrate_font.render(calibrate_text, True, 'black')
+        calibrate_text_rect = calibrate_text_surf.get_rect(center=(WIDTH/2, HEIGHT/2))
+        self.surface.blit(calibrate_text_surf, calibrate_text_rect)
+
+        #self.calibrated_data.append(self.data)
+
+        pygame.display.flip()
+
+    def display_muse_data(self, data, x=None, y=None):
+        data_text_font = pygame.font.Font('assets/game_font.ttf', 32)
+        data_text_surf = data_text_font.render('theta/beta ratio: ' + str(round(data, 2)), True, 'black')
+        if not (x and y):
+            x, y = 0 + data_text_surf.get_width()/2, self.scores_rect.top - data_text_surf.get_height()/2
+        data_text_rect = data_text_surf.get_rect(center=(x, y))
+        self.surface.blit(data_text_surf, data_text_rect)
+
+        return data_text_rect
+
+    def record_muse_data(self):
+        # BCI
+        data = BOARD.get_data_quantity(num_points)
+        alpha_session = []
+        theta_session = []
+        beta_session = []
+
+        alpha_index = 2
+        theta_index = 1
+        beta_index = 3
+
+        exg_channels = BOARD.get_exg_channels()
+
+        for i in exg_channels:
+            channel = data[i, :]
+            fftData = np.fft.fft(channel)
+            freq = np.fft.fftfreq(len(channel))*250
+
+            # cut freq
+            cutFreq = 60
+            tolerance = 2
+
+            # Use slicing to set a range of values to 0 amplitude
+            fftData[   cutFreq - tolerance   :   cutFreq + tolerance   ] = 0
+
+            # Remove unnecessary negative reflection
+            fftData = fftData[1:int(len(fftData)/2)]
+            freq = freq[1:int(len(freq)/2)]
+            filteredData = abs(np.fft.ifft(fftData))
+
+            # redo processing with filteredData
+            fftData = np.fft.fft(filteredData)
+            freq = np.fft.fftfreq(len(filteredData))*250
+
+            # Recall FFT is a complex function
+            fftData = np.sqrt(fftData.real**2 + fftData.imag**2)
+
+            # Band binding
+            bandTotals = [0,0,0,0,0]
+            bandCounts = [0,0,0,0,0]
+
+            for point in range(len(freq)):
+                if(freq[point] < 4):
+                    bandTotals[0] += fftData[point]
+                    bandCounts[0] += 1
+                elif(freq[point] < 8):
+                    bandTotals[1] += fftData[point]
+                    bandCounts[1] += 1
+                elif(freq[point] < 12):
+                    bandTotals[2] += fftData[point]
+                    bandCounts[2] += 1
+                elif(freq[point] < 30):
+                    bandTotals[3] += fftData[point]
+                    bandCounts[3] += 1
+                elif(freq[point] < 100):
+                    bandTotals[4] += fftData[point]
+                    bandCounts[4] += 1
+
+            # Save the average of all points
+            bands = list(np.array(bandTotals)/np.array(bandCounts))
+            alpha_bands = bands[alpha_index]
+            theta_bands = bands[theta_index]
+            beta_bands = bands[beta_index]
+
+            alpha_session.append(alpha_bands)
+            theta_session.append(theta_bands)
+            beta_session.append(beta_bands)
+
+        ALPHA_LEVELS.append(average(alpha_session))
+        THETABETA_RATIOS.append(sum(theta_session)/sum(beta_session))
+
+        while len(THETABETA_RATIOS) >= 60:
+            THETABETA_RATIOS.pop(0)
+
+        return average(THETABETA_RATIOS)
 
     def handle_events(self):
         # Handle each user event by changing the game state appropriately.
@@ -130,13 +312,13 @@ class Game:
         for event in events:
             if event.type == pygame.QUIT:
                 self.close_clicked = True
-            if event.type == self.customer_timer:
-                self.customers_rect_list.append(self.customer_surf.get_rect(topleft=(randint(-256, -128), 0)))
+            if self.round_started and event.type == self.customer_timer:
+                self.customer_rect_list.append(self.customer_surf.get_rect(topleft=(randint(-256, -128), 0)))
                 self.customer_order_list.append(choice(ORDERS))
                 pygame.time.set_timer(self.customer_timer, randint(3000, 7000))  # randomize customer timer
 
     def check_holding(self,pressed_keys):
-        #determine if pressed keys
+        # determine if pressed keys
         points=[]
         point1= (self.player.rect.center[0],self.player.rect.center[1]+100)
         points.append(point1)
@@ -150,92 +332,114 @@ class Game:
             if pygame.Rect.collidepoint(self.fish_rect,x):
                 if pressed_keys[K_SPACE]:
                     self.food.surf.fill("cyan")
-                    self.holding="fish"
+                    self.holding="raw_fish"
                     
             elif pygame.Rect.collidepoint(self.stove_rect,x):
                 if pressed_keys[K_SPACE]:
-                    if self.holding=="fish" or self.holding=="potato":
-                        if self.holding == "fish":
+                    if self.holding=="raw_fish" or self.holding=="potato":
+                        if self.holding == "raw_fish":
                             self.food.surf.fill("blue")
-                            self.holding="cooked_fish"
+                            self.holding="fish"
                         elif self.holding == "potato":
-                            self.food.surf.fill("yellow")
+                            self.food.surf = pygame.image.load("assets/models/fries.png")
                             self.holding="fries"
                         
             elif pygame.Rect.collidepoint(self.potato_rect,x):
                 if pressed_keys[K_SPACE]:
-                    self.food.surf.fill("orange")
+                    self.food.surf = pygame.image.load("assets/models/potato.png")
                     self.holding="potato"
             
             if pygame.Rect.collidepoint(self.checkout_rect,x):
                 if pressed_keys[K_SPACE]:
-                    if self.holding=="cooked_fish" or self.holding=="fries":
+                    if self.holding=="fish" or self.holding=="fries":
                         if self.holding == self.customer_order_list[0]:
-                            self.customers.customer_complete(self.customers_rect_list,self.customer_order_list)
+                            self.customers.customer_complete(self.customer_rect_list,self.customer_order_list)
                             self.food.surf.fill("black")
-                            self.score_counter+=1
-                            self.holding=None
+                            self.score_counter += 1
+                            self.holding = None
 
-    def timer(self):
-        mins, secs = divmod(int(self.timestarts), 60)
-        self.timeformat = '{:02d}:{:02d}'.format(mins, secs)
-        #print(timeformat, end='\r')
-        self.timestarts -= 1/60
-        #print(self.timestarts)
-        if self.timestarts <= 0:
-            self.continue_game =False
-
-    
-    
-
-    
     def draw(self):
         # Draw all game objects.
         self.surface.fill(self.bg_color)  # clear the display surface first
         for entity in self.all_sprites:
             self.screen.blit(entity.surf, entity.rect)
+            
         self.screen.blit(self.potato_surf, self.potato_rect)
         self.screen.blit(self.fish_surf, self.fish_rect)
         self.screen.blit(self.stove_surf, self.stove_rect)
         self.screen.blit(self.checkout_surf, self.checkout_rect)
         
-        # display timer
-        font_size = 50
-        fg_color = pygame.Color('black')
-        font = pygame.font.SysFont('', font_size)
-        text_box2 = font.render(str(int(self.timestarts)), True, fg_color)
-        text_rect= text_box2.get_rect(bottomright=(WIDTH,HEIGHT))
-        self.surface.blit(text_box2, text_rect)
+        self.customers.draw(self.customer_rect_list, self.customer_order_list)
+        
+        self.scores_rect = self.draw_scores()
+        self.food.draw()
 
-        self.customers_rect_list = self.customers.customer_movement(self.customers_rect_list)
-        self.draw_scores()
-        pressed_keys=pygame.key.get_pressed()
-        self.food.draw(pressed_keys)
+        # self.muse_data_rect = self.display_muse_data(self.data)
+        # self.display_stress_threshold()
+
         pygame.display.flip()  # updates the display
 
-    def draw_scores(self):
-        score_string1 = str(self.score_counter)
-        font_size = 50
-        fg_color = pygame.Color('black')
-        font = pygame.font.SysFont('', font_size)
-        text_box1 = font.render(score_string1, True, fg_color)
-        text_rect= text_box1.get_rect(bottomleft=(0,HEIGHT))
-        self.surface.blit(text_box1, text_rect)
+    def display_stress_threshold(self):
+        text_font = pygame.font.Font('assets/game_font.ttf', 32)
+        text_surf = text_font.render('stay above ' + str(round(self.stress_threshold, 2)), True, 'black')
+        text_rect = text_surf.get_rect(bottomleft = self.muse_data_rect.topleft)
+        self.screen.blit(text_surf, text_rect)
 
+    def draw_scores(self):
+        score_string = 'score: ' + str(self.score_counter)
+        fg_color = pygame.Color('black')
+        font = pygame.font.Font('assets/game_font.ttf', 32)
+        text_box = font.render(score_string, True, fg_color)
+        text_rect = text_box.get_rect(bottomleft=(0,HEIGHT))
+        self.surface.blit(text_box, text_rect)
+
+        return text_rect
 
     def update(self):
         # Update the game objects for the next frame.
         pressed_keys = pygame.key.get_pressed()
         self.check_holding(pressed_keys)
         self.player.move(pressed_keys)
-        self.timer()
         #self.display_timer()
         # customers
-        completed = False
-        self.customers.customer_collisions(self.customers_rect_list)
-        if self.customer_order_list and completed == self.customer_order_list[0]:
-            self.customers.customer_complete(self.customers_rect_list, self.customer_order_list)
+        self.customers.customer_movement(self.customer_rect_list)
+        self.customers.handle_customer_collisions(self.customer_rect_list)
 
+        # win condition
+        # if self.data < self.stress_threshold:
+            # self.continue_game = False
+
+    def display_main_menu(self):
+        self.surface.fill('beige')
+
+        title_font = pygame.font.Font('assets/title_font.ttf', 96)
+        title_surf = title_font.render('calm the food down!', True, 'black')
+        title_rect = title_surf.get_rect(center=(WIDTH/2, HEIGHT/4))
+        self.surface.blit(title_surf, title_rect)
+
+        button_text_font = pygame.font.Font('assets/title_font.ttf', 64)
+        button_text_surf = button_text_font.render('start', True, 'black')
+        button_text_rect = button_text_surf.get_rect(center = (WIDTH/2, HEIGHT/2))
+        self.surface.blit(button_text_surf, button_text_rect)
+        button_border_rect = pygame.Rect(0, 0, button_text_rect.width + 32, button_text_rect.height + 32)
+        button_border_rect.center = button_text_rect.center
+        pygame.draw.rect(self.surface, 'black', button_border_rect, 8)
+
+        # self.display_muse_data(self.data, WIDTH/2, 3*HEIGHT/4)
+
+        censor_rect = pygame.Rect(0, 0, 104, 12)
+        censor_rect.center = (title_rect.center[0]+47, title_rect.center[1]+10)
+        pygame.draw.rect(self.surface, 'black', censor_rect)
+
+        mouse_press = pygame.mouse.get_pressed()
+        mouse_pos = pygame.mouse.get_pos()
+
+        if mouse_press[0] and pygame.Rect.collidepoint(button_border_rect, mouse_pos):
+            self.started = True
+            self.calibrating = True
+
+        pygame.display.flip()
+        
 
 class Wall(pygame.sprite.Sprite):
     def __init__ (self, x, y, width, height, color, surface):
@@ -245,25 +449,24 @@ class Wall(pygame.sprite.Sprite):
         self.surf.fill(color)
         self.rect = self.surf.get_rect(topleft = (x,y))
         self.color = pygame.Color(color)
-
+        
 
 class Player(pygame.sprite.Sprite):
-    def __init__(self, height, width, velocity, surface, parent):
+    def __init__(self, height, width, parent):
         super(Player,self).__init__()
         
         self.surf = pygame.Surface((width,height))
         self.rect = self.surf.get_rect(topleft=(15,270))
         self.color = pygame.Color('black')
         self.surf.fill(self.color)
-        self.velocity = velocity
         self.parent = parent
 
     def move(self, pressed_keys):
         if pressed_keys[K_UP]:
-            self.rect.move_ip(0,-self.velocity)
+            self.rect.move_ip(0, -PLAYER_SPEED)
             
         if pressed_keys[K_DOWN]:
-            self.rect.move_ip(0,self.velocity)
+            self.rect.move_ip(0, PLAYER_SPEED)
 
         if pygame.sprite.spritecollideany(self,self.parent.walls):
             hits = pygame.sprite.spritecollide(self,self.parent.walls,False)
@@ -276,9 +479,9 @@ class Player(pygame.sprite.Sprite):
                     self.rect.move_ip(0,move_down)
 
         if pressed_keys[K_LEFT]:
-            self.rect.move_ip(-self.velocity, 0)
+            self.rect.move_ip(-PLAYER_SPEED, 0)
         if pressed_keys[K_RIGHT]:
-            self.rect.move_ip(self.velocity, 0)
+            self.rect.move_ip(PLAYER_SPEED, 0)
 
         if pygame.sprite.spritecollideany(self,self.parent.walls):
             hits=pygame.sprite.spritecollide(self,self.parent.walls,False)
@@ -299,51 +502,17 @@ class Player(pygame.sprite.Sprite):
         elif self.rect.bottom >= HEIGHT:
             self.rect.move_ip(0,-(self.rect.bottom-HEIGHT))
             
-         
-class Ingredient:
-    def __init__(self, type, screen, left, top):
-        self.type = type
-        self.cooked = False
-        self.held = True
-        self.screen = screen
-        self.rect = pygame.Rect(left, top, 64, 64)
-        if self.type == "fries":
-            self.color = 'orange'
-        elif self.type == "fish":
-            self.color = 'cyan'
-
-    def draw(self):
-        pygame.draw.rect(self.screen, self.color, self.rect)
-
-    def get_held(self):
-        return self.held
-    
-    def drop(self):
-        self.held = False
-
-    def cook(self):
-        if self.type == "fries":
-            self.color = 'yellow'
-        elif self.type == "fish":
-            self.color = 'blue'
-            
             
 class Customers:
-    def __init__(self, screen, customer_surf, customer_list, order_list):
+    def __init__(self, screen, customer_surf):
         self.screen = screen
         self.customer_surf = customer_surf
     
     def customer_movement(self, customer_list):
-      if customer_list:
-          for customer_rect in customer_list:
-              customer_rect.x += 5
+        for customer_rect in customer_list:
+            customer_rect.x += CUSTOMER_SPEED
 
-              self.screen.blit(self.customer_surf, customer_rect)
-          return customer_list
-      else:
-          return []
-
-    def customer_collisions(self, customer_list):
+    def handle_customer_collisions(self, customer_list):
         for i in range(len(customer_list)):
             if i == 0:
                 if customer_list[i].right >= WIDTH: 
@@ -352,9 +521,18 @@ class Customers:
                 if customer_list[i].right >= customer_list[i-1].left:
                     customer_list[i].right = customer_list[i-1].left
 
-    def customer_complete(self,customer_list, order_list):
+    def customer_complete(self, customer_list, order_list):
         customer_list.pop(0)
         order_list.pop(0)
+
+    def draw(self, customer_list, order_list):
+        for i in range(len(customer_list)):
+            self.screen.blit(self.customer_surf, customer_list[i])
+            order_text = pygame.font.Font('assets/game_font.ttf', 32)
+            order_surf = order_text.render(order_list[i], True, 'white')
+            order_rect = order_surf.get_rect(center=customer_list[i].center)
+            self.screen.blit(order_surf, order_rect)
+
 
 class Food(pygame.sprite.Sprite):
     def __init__(self, height, width, surface,player):
@@ -365,12 +543,11 @@ class Food(pygame.sprite.Sprite):
         self.rect=self.surf.get_rect(center=self.player.rect.center) 
         self.color = pygame.Color('black')
         self.surf.fill(self.color)
-        
-        
 
-
-    def draw(self, pressed_keys):
+    def draw(self):
         self.rect.center=self.player.rect.center
-        #self.direction(pressed_keys)
         self.surface.blit(self.surf,self.rect)
-main()
+
+
+if __name__ == '__main__':
+    main()
