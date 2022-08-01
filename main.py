@@ -1,4 +1,3 @@
-from re import S
 import pygame  # docs found here: https://www.pygame.org/docs/
 from random import randint, choice
 import time
@@ -19,7 +18,6 @@ from brainflow.data_filter import (
     DetrendOperations,
 )
 import numpy as np
-import matplotlib.pyplot as plt
 from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds
 from Board import Board
 
@@ -35,7 +33,7 @@ BOARD_ID = 22  # muse 2 id
 BOARD = Board(board_id=BOARD_ID)
 SAMPLING_RATE = BOARD.get_sampling_rate(BOARD_ID)
 
-BUFFER_LENGTH = 1
+BUFFER_LENGTH = 2
 num_points = SAMPLING_RATE * BUFFER_LENGTH
 
 ALPHA_LEVELS = []
