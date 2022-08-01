@@ -149,7 +149,7 @@ class Game:
         # BCI
         self.calibrated_data = []
         self.baseline = None
-        self.stress_threshold_index = 0.9
+        self.stress_threshold_index = 0.25
         self.stress_threshold = None
 
     def run(self):    
@@ -249,9 +249,21 @@ class Game:
             fftData = np.fft.fft(channel)
             freq = np.fft.fftfreq(len(channel))*250
 
+            # cut freq
+            cutFreq = 60
+            tolerance = 2
+
+            # Use slicing to set a range of values to 0 amplitude
+            fftData[   cutFreq - tolerance   :   cutFreq + tolerance   ] = 0
+
             # Remove unnecessary negative reflection
             fftData = fftData[1:int(len(fftData)/2)]
             freq = freq[1:int(len(freq)/2)]
+            filteredData = abs(np.fft.ifft(fftData))
+
+            # redo processing with filteredData
+            fftData = np.fft.fft(filteredData)
+            freq = np.fft.fftfreq(len(filteredData))*250
 
             # Recall FFT is a complex function
             fftData = np.sqrt(fftData.real**2 + fftData.imag**2)
@@ -277,7 +289,7 @@ class Game:
                     bandTotals[4] += fftData[point]
                     bandCounts[4] += 1
 
-            # Save the average of all points 
+            # Save the average of all points
             bands = list(np.array(bandTotals)/np.array(bandCounts))
             alpha_bands = bands[alpha_index]
             theta_bands = bands[theta_index]
@@ -288,6 +300,9 @@ class Game:
             beta_session.append(beta_bands)
         ALPHA_LEVELS.append(average(alpha_session))
         THETABETA_RATIOS.append(sum(theta_session)/sum(beta_session))
+
+        while len(THETABETA_RATIOS) >= 60:
+            THETABETA_RATIOS.pop(0)
 
         return average(THETABETA_RATIOS)
 
@@ -518,6 +533,7 @@ class Customers:
             order_rect = order_surf.get_rect(center=customer_list[i].center)
             self.screen.blit(order_surf, order_rect)
 
+
 class Food(pygame.sprite.Sprite):
     def __init__(self, height, width, surface,player):
         super(Food,self).__init__()
@@ -532,4 +548,6 @@ class Food(pygame.sprite.Sprite):
         self.rect.center=self.player.rect.center
         self.surface.blit(self.surf,self.rect)
 
-main()
+
+if __name__ == '__main__':
+    main()
