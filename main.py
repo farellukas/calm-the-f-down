@@ -6,6 +6,7 @@ from pygame.locals import(
     K_DOWN,
     K_LEFT,
     K_RIGHT,
+    K_SPACE
 )
 
 
@@ -41,7 +42,6 @@ class Game:
         self.max_frames = 150
         self.frame_counter = 0
         self.FPS = 60
-
         self.close_clicked = False
         self.continue_game = True
         self.started = False
@@ -66,15 +66,22 @@ class Game:
         self.all_sprites = pygame.sprite.Group()
         self.walls.add([self.wall1, self.wall2, self.wall3, self.wall4, self.wall5,self.wall6])
         self.all_sprites.add([self.wall1, self.wall2, self.wall3, self.wall4, self.wall5,self.wall6])
-        
+
         # player properties
         player_width = 72
         player_height = 72
-        self.player_speed = 25
-        
+        food_height=64
+        food_weight =64
+        self.player_speed = 15
+        self.holding= None
+        self.score_counter=0
+
         # create Player object
         self.player = Player(player_height,player_width,self)
         self.all_sprites.add(self.player)
+
+        # create Food object
+        self.food=Food(food_height,food_weight,self.surface,self.player)
         
         # ingredients
         self.potato_surf = pygame.Surface((64, 64))
@@ -89,6 +96,11 @@ class Game:
         self.stove_surf = pygame.Surface((128, 128))
         self.stove_surf.fill('gray')
         self.stove_rect = self.stove_surf.get_rect(center = self.wall1.rect.center)
+
+        # checkout
+        self.checkout_surf = pygame.Surface((128, 128))
+        self.checkout_surf.fill('green')
+        self.checkout_rect = self.stove_surf.get_rect(topright=self.wall3.rect.topright)
         
         # customers
         self.customer_surf = pygame.Surface((128, 128))
@@ -104,6 +116,10 @@ class Game:
     def run(self):    
         while not self.close_clicked:  # until player clicks close box
             self.handle_events()
+            self.draw()
+            if self.continue_game:
+                self.update()
+                # self.decide_continue()
             if not self.started:
                 self.display_main_menu()
             else:
@@ -124,23 +140,78 @@ class Game:
                 self.customer_order_list.append(choice(ORDERS))
                 pygame.time.set_timer(self.customer_timer, randint(3000, 7000))  # randomize customer timer
 
+    def check_holding(self,pressed_keys):
+        #determine if pressed keys
+        points=[]
+        point1= (self.player.rect.center[0],self.player.rect.center[1]+100)
+        points.append(point1)
+        point2= (self.player.rect.center[0]+100,self.player.rect.center[1])
+        points.append(point2)
+        point3= (self.player.rect.center[0],self.player.rect.center[1]-100)
+        points.append(point3)
+        point4= (self.player.rect.center[0]-100,self.player.rect.center[1])
+        points.append(point4)
+        for x in points:
+            if pygame.Rect.collidepoint(self.fish_rect,x):
+                if pressed_keys[K_SPACE]:
+                    self.food.surf.fill("cyan")
+                    self.holding="fish"
+                    
+            elif pygame.Rect.collidepoint(self.stove_rect,x):
+                if pressed_keys[K_SPACE]:
+                    if self.holding=="fish" or self.holding=="potato":
+                        if self.holding == "fish":
+                            self.food.surf.fill("blue")
+                            self.holding="cooked_fish"
+                        elif self.holding == "potato":
+                            self.food.surf.fill("yellow")
+                            self.holding="fries"
+                        
+            elif pygame.Rect.collidepoint(self.potato_rect,x):
+                if pressed_keys[K_SPACE]:
+                    self.food.surf.fill("orange")
+                    self.holding="potato"
+            
+            if pygame.Rect.collidepoint(self.checkout_rect,x):
+                if pressed_keys[K_SPACE]:
+                    if self.holding=="cooked_fish" or self.holding=="fries":
+                        if self.holding == self.customer_order_list[0]:
+                            self.customers.customer_complete(self.customers_rect_list,self.customer_order_list)
+                            self.food.surf.fill("black")
+                            self.score_counter+=1
+                            self.holding=None
+
     def draw(self):
         # Draw all game objects.
         self.surface.fill(self.bg_color)  # clear the display surface first
-        for entity in self.all_sprites:  # draw all sprites
+        for entity in self.all_sprites:
             self.screen.blit(entity.surf, entity.rect)
-
+            
         self.screen.blit(self.potato_surf, self.potato_rect)
         self.screen.blit(self.fish_surf, self.fish_rect)
         self.screen.blit(self.stove_surf, self.stove_rect)
-
+        self.screen.blit(self.checkout_surf, self.checkout_rect)
+        
         self.customers.draw(self.customer_rect_list, self.customer_order_list)
         
+        self.draw_scores()
+        pressed_keys=pygame.key.get_pressed()
+        self.food.draw(pressed_keys)
         pygame.display.flip()  # updates the display
+
+    def draw_scores(self):
+        score_string1 = str(self.score_counter)
+        font_size = 50
+        fg_color = pygame.Color('black')
+        font = pygame.font.SysFont('', font_size)
+        text_box1 = font.render(score_string1, True, fg_color)
+        text_rect= text_box1.get_rect(bottomleft=(0,HEIGHT))
+        self.surface.blit(text_box1, text_rect)
 
     def update(self):
         # Update the game objects for the next frame.
         pressed_keys = pygame.key.get_pressed()
+        self.check_holding(pressed_keys)
         self.player.move(pressed_keys)
 
         # customers
@@ -177,7 +248,7 @@ class Game:
             self.started = True
 
         pygame.display.flip()
-
+        
 
 class Wall(pygame.sprite.Sprite):
     def __init__ (self, x, y, width, height, color, surface):
@@ -187,7 +258,7 @@ class Wall(pygame.sprite.Sprite):
         self.surf.fill(color)
         self.rect = self.surf.get_rect(topleft = (x,y))
         self.color = pygame.Color(color)
-
+        
 
 class Player(pygame.sprite.Sprite):
     def __init__(self, height, width, parent):
@@ -240,34 +311,6 @@ class Player(pygame.sprite.Sprite):
         elif self.rect.bottom >= HEIGHT:
             self.rect.move_ip(0,-(self.rect.bottom-HEIGHT))
             
-         
-class Ingredient:
-    def __init__(self, type, screen, left, top):
-        self.type = type
-        self.cooked = False
-        self.held = True
-        self.screen = screen
-        self.rect = pygame.Rect(left, top, 64, 64)
-        if self.type == "fries":
-            self.color = 'orange'
-        elif self.type == "fish":
-            self.color = 'cyan'
-
-    def draw(self):
-        pygame.draw.rect(self.screen, self.color, self.rect)
-
-    def get_held(self):
-        return self.held
-    
-    def drop(self):
-        self.held = False
-
-    def cook(self):
-        if self.type == "fries":
-            self.color = 'yellow'
-        elif self.type == "fish":
-            self.color = 'blue'
-            
             
 class Customers:
     def __init__(self, screen, customer_surf):
@@ -299,5 +342,18 @@ class Customers:
             order_rect = order_surf.get_rect(center=customer_list[i].center)
             self.screen.blit(order_surf, order_rect)
 
+class Food(pygame.sprite.Sprite):
+    def __init__(self, height, width, surface,player):
+        super(Food,self).__init__()
+        self.surf=pygame.Surface((width,height))
+        self.surface=surface
+        self.player=player
+        self.rect=self.surf.get_rect(center=self.player.rect.center) 
+        self.color = pygame.Color('black')
+        self.surf.fill(self.color)
 
+    def draw(self, pressed_keys):
+        self.rect.center=self.player.rect.center
+        #self.direction(pressed_keys)
+        self.surface.blit(self.surf,self.rect)
 main()
