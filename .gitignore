@@ -1,3 +1,6 @@
 # directories
 nathacks2022_venv/
 __pycache__/
+
+# files
+temp.py
