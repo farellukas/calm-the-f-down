@@ -40,5 +40,5 @@ Python 3.10 or later (https://www.python.org/)
 Using a terminal, run `py main.py` in the terminal to run the game
 
 ## Controls
-Arrow keys to move
-Spacebar to interact
+- Arrow keys to move
+- Spacebar to interact
