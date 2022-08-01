@@ -6,7 +6,6 @@ from pygame.locals import(
     K_DOWN,
     K_LEFT,
     K_RIGHT,
-    
 )
 
 
@@ -14,7 +13,7 @@ from pygame.locals import(
 WIDTH = 768
 HEIGHT= 640
 ORDERS = ['fries', 'fish']
-PLAYER_SPEED = 20
+PLAYER_SPEED = 16
 CUSTOMER_SPEED = 5
 
 
@@ -135,7 +134,7 @@ class Game:
         self.screen.blit(self.fish_surf, self.fish_rect)
         self.screen.blit(self.stove_surf, self.stove_rect)
 
-        self.customers.draw(self.customer_rect_list)
+        self.customers.draw(self.customer_rect_list, self.customer_order_list)
         
         pygame.display.flip()  # updates the display
 
@@ -292,9 +291,13 @@ class Customers:
         customer_list.pop(0)
         order_list.pop(0)
 
-    def draw(self, customer_list):
-        for customer_rect in customer_list:
-            self.screen.blit(self.customer_surf, customer_rect)
+    def draw(self, customer_list, order_list):
+        for i in range(len(customer_list)):
+            self.screen.blit(self.customer_surf, customer_list[i])
+            order_text = pygame.font.Font('assets/game_font.ttf', 32)
+            order_surf = order_text.render(order_list[i], True, 'white')
+            order_rect = order_surf.get_rect(center=customer_list[i].center)
+            self.screen.blit(order_surf, order_rect)
 
 
 main()
