@@ -186,6 +186,11 @@ class Game:
         button_border_rect.center = button_text_rect.center
         pygame.draw.rect(self.surface, 'black', button_border_rect, 8)
 
+        gameover_font = pygame.font.Font('assets/title_font.ttf', 64)
+        gameover_text_surf = gameover_font.render('score: ' + str(self.score_counter), True, 'black')
+        gameover_text_rect = gameover_text_surf.get_rect(center=(WIDTH/2, 3*HEIGHT/4))
+        self.surface.blit(gameover_text_surf, gameover_text_rect)
+
         mouse_press = pygame.mouse.get_pressed()
         mouse_pos = pygame.mouse.get_pos()
 
@@ -301,7 +306,7 @@ class Game:
         ALPHA_LEVELS.append(average(alpha_session))
         THETABETA_RATIOS.append(sum(theta_session)/sum(beta_session))
 
-        while len(THETABETA_RATIOS) >= 60:
+        while len(THETABETA_RATIOS) >= 120:
             THETABETA_RATIOS.pop(0)
 
         return average(THETABETA_RATIOS)
