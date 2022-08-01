@@ -1,4 +1,5 @@
 import pygame  # docs found here: https://www.pygame.org/docs/
+import time
 from random import randint, choice
 
 from pygame.locals import(
@@ -40,6 +41,7 @@ class Game:
         self.max_frames = 150
         self.frame_counter = 0
         self.FPS = 60
+        self.timestarts=5
         self.size = self.surface.get_size()
         
         # create Clock object
@@ -174,8 +176,18 @@ class Game:
                             self.score_counter+=1
                             self.holding=None
 
-            
-        
+    def timer(self):
+        mins, secs = divmod(int(self.timestarts), 60)
+        self.timeformat = '{:02d}:{:02d}'.format(mins, secs)
+        #print(timeformat, end='\r')
+        self.timestarts -= 1/60
+        #print(self.timestarts)
+        if self.timestarts <= 0:
+            self.continue_game =False
+
+    
+    
+
     
     def draw(self):
         # Draw all game objects.
@@ -186,6 +198,15 @@ class Game:
         self.screen.blit(self.fish_surf, self.fish_rect)
         self.screen.blit(self.stove_surf, self.stove_rect)
         self.screen.blit(self.checkout_surf, self.checkout_rect)
+        
+        # display timer
+        font_size = 50
+        fg_color = pygame.Color('black')
+        font = pygame.font.SysFont('', font_size)
+        text_box2 = font.render(str(int(self.timestarts)), True, fg_color)
+        text_rect= text_box2.get_rect(bottomright=(WIDTH,HEIGHT))
+        self.surface.blit(text_box2, text_rect)
+
         self.customers_rect_list = self.customers.customer_movement(self.customers_rect_list)
         self.draw_scores()
         pressed_keys=pygame.key.get_pressed()
@@ -207,7 +228,8 @@ class Game:
         pressed_keys = pygame.key.get_pressed()
         self.check_holding(pressed_keys)
         self.player.move(pressed_keys)
-
+        self.timer()
+        #self.display_timer()
         # customers
         completed = False
         self.customers.customer_collisions(self.customers_rect_list)
