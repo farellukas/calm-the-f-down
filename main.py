@@ -9,6 +9,18 @@ from pygame.locals import(
     K_SPACE
 )
 
+from brainflow.data_filter import (
+    DataFilter,
+    FilterTypes,
+    AggOperations,
+    WindowFunctions,
+    DetrendOperations,
+)
+import numpy as np
+import matplotlib.pyplot as plt
+from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds
+from Board import Board
+
 
 # GLOBAL VARIABLES
 WIDTH = 768
@@ -17,7 +29,18 @@ ORDERS = ['fries', 'fish']
 PLAYER_SPEED = 16
 CUSTOMER_SPEED = 5
 
+BOARD_ID = 22  # muse 2 id
+BOARD = Board(board_id=BOARD_ID)
+SAMPLING_RATE = BOARD.get_sampling_rate(BOARD_ID)
 
+BUFFER_LENGTH = 1
+num_points = SAMPLING_RATE * BUFFER_LENGTH
+
+ALPHA_LEVELS = []
+THETABETA_RATIOS = []
+
+
+# USER DEFINED FUNCTIONS
 def main():
     # initialize all pygame modules (some need initialization)
     pygame.init()
@@ -30,6 +53,9 @@ def main():
     
     # quit pygame and clean up the pygame window
     pygame.quit()
+
+def average(list):
+    return sum(list)/len(list)
   
   
 # USER-DEFINED CLASSES
@@ -44,7 +70,7 @@ class Game:
         self.FPS = 60
         self.close_clicked = False
         self.continue_game = True
-        self.started = True
+        self.started = False
         
         # create Clock object
         self.game_Clock = pygame.time.Clock()
@@ -81,7 +107,7 @@ class Game:
         self.all_sprites.add(self.player)
 
         # create Food object
-        self.food=Food(food_height,food_weight,self.surface,self.player)
+        self.food = Food(food_height,food_weight,self.surface,self.player)
         
         # ingredients
         self.potato_surf = pygame.Surface((64, 64))
@@ -113,8 +139,10 @@ class Game:
         self.customer_timer = pygame.USEREVENT + 1
         pygame.time.set_timer(self.customer_timer, 1000)
 
+
     def run(self):    
         while not self.close_clicked:  # until player clicks close box
+            self.handle_events()
             if not self.started:
                 self.display_main_menu()
             else:
@@ -123,6 +151,72 @@ class Game:
                     self.update()
                     # self.decide_continue()
             self.game_Clock.tick(self.FPS)  # set FPS ceiling to self.FPS
+
+    def display_muse_data(self, data):
+        data_text_font = pygame.font.Font('assets/game_font.ttf', 32)
+        data_text_surf = data_text_font.render(str(round(data, 2)), True, 'black')
+        data_text_rect = data_text_surf.get_rect(bottomleft=(0, self.scores_rect.top))
+        self.surface.blit(data_text_surf, data_text_rect)
+
+    def record_muse_data(self):
+        # BCI
+        data = BOARD.get_data_quantity(num_points)
+        alpha_session = []
+        theta_session = []
+        beta_session = []
+
+        alpha_index = 2
+        theta_index = 1
+        beta_index = 3
+
+        exg_channels = BOARD.get_exg_channels()
+
+        for i in exg_channels:
+            channel = data[i, :]
+            fftData = np.fft.fft(channel)
+            freq = np.fft.fftfreq(len(channel))*250
+
+            # Remove unnecessary negative reflection
+            fftData = fftData[1:int(len(fftData)/2)]
+            freq = freq[1:int(len(freq)/2)]
+
+            # Recall FFT is a complex function
+            fftData = np.sqrt(fftData.real**2 + fftData.imag**2)
+
+            # Band binding
+            bandTotals = [0,0,0,0,0]
+            bandCounts = [0,0,0,0,0]
+
+            for point in range(len(freq)):
+                if(freq[point] < 4):
+                    bandTotals[0] += fftData[point]
+                    bandCounts[0] += 1
+                elif(freq[point] < 8):
+                    bandTotals[1] += fftData[point]
+                    bandCounts[1] += 1
+                elif(freq[point] < 12):
+                    bandTotals[2] += fftData[point]
+                    bandCounts[2] += 1
+                elif(freq[point] < 30):
+                    bandTotals[3] += fftData[point]
+                    bandCounts[3] += 1
+                elif(freq[point] < 100):
+                    bandTotals[4] += fftData[point]
+                    bandCounts[4] += 1
+
+            # Save the average of all points 
+            bands = list(np.array(bandTotals)/np.array(bandCounts))
+            alpha_bands = bands[alpha_index]
+            theta_bands = bands[theta_index]
+            beta_bands = bands[beta_index]
+
+            alpha_session.append(alpha_bands)
+            theta_session.append(theta_bands)
+            beta_session.append(beta_bands)
+        ALPHA_LEVELS.append(average(alpha_session))
+        THETABETA_RATIOS.append(sum(theta_session)/sum(beta_session))
+
+        return average(THETABETA_RATIOS)
 
     def handle_events(self):
         # Handle each user event by changing the game state appropriately.
@@ -150,14 +244,14 @@ class Game:
             if pygame.Rect.collidepoint(self.fish_rect,x):
                 if pressed_keys[K_SPACE]:
                     self.food.surf.fill("cyan")
-                    self.holding="fish"
+                    self.holding="raw_fish"
                     
             elif pygame.Rect.collidepoint(self.stove_rect,x):
                 if pressed_keys[K_SPACE]:
-                    if self.holding=="fish" or self.holding=="potato":
-                        if self.holding == "fish":
+                    if self.holding=="raw_fish" or self.holding=="potato":
+                        if self.holding == "raw_fish":
                             self.food.surf.fill("blue")
-                            self.holding="cooked_fish"
+                            self.holding="fish"
                         elif self.holding == "potato":
                             self.food.surf.fill("yellow")
                             self.holding="fries"
@@ -169,12 +263,12 @@ class Game:
             
             if pygame.Rect.collidepoint(self.checkout_rect,x):
                 if pressed_keys[K_SPACE]:
-                    if self.holding=="cooked_fish" or self.holding=="fries":
+                    if self.holding=="fish" or self.holding=="fries":
                         if self.holding == self.customer_order_list[0]:
-                            self.customers.customer_complete(self.customers_rect_list,self.customer_order_list)
+                            self.customers.customer_complete(self.customer_rect_list,self.customer_order_list)
                             self.food.surf.fill("black")
-                            self.score_counter+=1
-                            self.holding=None
+                            self.score_counter += 1
+                            self.holding = None
 
     def draw(self):
         # Draw all game objects.
@@ -189,19 +283,25 @@ class Game:
         
         self.customers.draw(self.customer_rect_list, self.customer_order_list)
         
-        self.draw_scores()
-        pressed_keys=pygame.key.get_pressed()
-        self.food.draw(pressed_keys)
+        self.scores_rect = self.draw_scores()
+        self.food.draw()
+
+        data = self.record_muse_data()
+        self.display_muse_data(data)
+
+        print(data)
+
         pygame.display.flip()  # updates the display
 
     def draw_scores(self):
         score_string = str(self.score_counter)
-        font_size = 50
         fg_color = pygame.Color('black')
-        font = pygame.font.SysFont('', font_size)
+        font = pygame.font.Font('assets/game_font.ttf', 32)
         text_box = font.render(score_string, True, fg_color)
-        text_rect= text_box.get_rect(bottomleft=(0,HEIGHT))
+        text_rect = text_box.get_rect(bottomleft=(0,HEIGHT))
         self.surface.blit(text_box, text_rect)
+
+        return text_rect
 
     def update(self):
         # Update the game objects for the next frame.
@@ -347,9 +447,8 @@ class Food(pygame.sprite.Sprite):
         self.color = pygame.Color('black')
         self.surf.fill(self.color)
 
-    def draw(self, pressed_keys):
+    def draw(self):
         self.rect.center=self.player.rect.center
-        #self.direction(pressed_keys)
         self.surface.blit(self.surf,self.rect)
 
 main()
