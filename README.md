@@ -1,4 +1,6 @@
 # calm-the-f-down
+A simple cooking game for stress management. 
+
 ## Inspiration
 While taking summer classes this year, we realized how difficult it is to manage and complete different tasks in a condensed period of time. We realize that the presence of stress did not make it any better in completing these tasks. This leads to the main problem calm the f(ood) down is trying to tackle: stress. Stress is such a big obstacle in everyone's life, whether it is during school or working or even playing a game, we all face stress, and usually it will only lead to poor judgement, decision-making, and overall productivity. With stress playing such a big role in impacting humans' regular life, we wanted to make a program that allows us to better control and overcome stress.
 
@@ -25,3 +27,18 @@ We were proud of being able to make a complete playable game and a functioning s
 
 ## What's next for calm the f(ood) down
 We hope to also be able to incorporate heart rate variability into our stress level measurement system to provide more accurate results. We also want to add sounds and other factors into the game that could help induce stress so that the player can learn to control greater stress stimuli. We also hope to develop the game more, adding more maps and/or random map generations and more ingredients with a cleaner and more interactive UI.
+
+## Prerequisite
+Python 3.10 or later (https://www.python.org/)
+
+## Installation
+1. Clone this repository
+2. Using a terminal, `cd` into the repository directory
+3. Run `pip install -r requirements.txt` in the terminal to download all the dependencies
+
+## Usage
+Using a terminal, run `py main.py` in the terminal to run the game
+
+## Controls
+Arrow keys to move
+Spacebar to interact
